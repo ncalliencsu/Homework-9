@@ -1,0 +1,403 @@
+---
+title: "HW9 Modeling Practice"
+format: html
+editor: visual
+---
+
+# Homework 9 Modeling Practice
+
+## Read Data and Library Setup
+
+```{r}
+
+library(baguette)
+library(readr)
+library(lubridate)
+library(recipes)
+library(tidyverse)
+library(tidymodels)
+library(tree) 
+
+raw_data <- read_csv("https://www4.stat.ncsu.edu/~online/datasets/SeoulBikeData.csv",
+                      locale = locale(encoding = "latin1"))
+
+```
+
+```{r}
+library(dplyr)
+library(lubridate)
+library(forcats)
+
+bike_data <- 
+  raw_data |>
+  rename(
+    DATE = `Date`,
+    RBC = `Rented Bike Count`,
+    HOUR = `Hour`,
+    "TEMP(deg C)" = `Temperature(°C)`,
+    "RH(%)" = `Humidity(%)`,
+    "WD_SPD(m/s)" = `Wind speed (m/s)`,
+    "VIS(10m)" = `Visibility (10m)`,
+    "DP_TEMP(deg C)" = `Dew point temperature(°C)`,
+    "SOL_RAD(MJ/m2)" = `Solar Radiation (MJ/m2)`,
+    "RAIN_FALL(mm)" = `Rainfall(mm)`,
+    "SNOW_FALL(cm)" = `Snowfall (cm)`,
+    SEASONS = `Seasons`,
+    HOLIDAY = `Holiday`,
+    FUNC_DAY = `Functioning Day`
+  ) |>
+  mutate(
+    DATE = dmy(DATE),
+    HOLIDAY = as_factor(HOLIDAY),
+    SEASONS = as_factor(SEASONS),
+    FUNC_DAY = as_factor(FUNC_DAY)
+  )
+
+write.csv(bike_data, "bike_data.csv")
+```
+
+Summarize Across Hours
+
+```{r}
+
+bd_sub <- bike_data |> 
+  group_by(DATE, SEASONS, HOLIDAY) |>
+  summarise(across(where(is.numeric) , mean, na.rm = TRUE, .names = '{col}_MEAN'),
+            SUM_RBC = sum(RBC),
+            "SUM_RAIN_FALL(mm)" = sum(`RAIN_FALL(mm)`),
+            "SUM_SNOW_FALL(cm)" = sum(`SNOW_FALL(cm)`),) |>
+            select(DATE, SEASONS, HOLIDAY, starts_with("SUM"), everything(), -RBC_MEAN, -HOUR_MEAN, -`RAIN_FALL(mm)_MEAN`, -`SNOW_FALL(cm)_MEAN`)
+                        
+write.csv(bd_sub, "bd_sub_after.csv")
+
+```
+
+## Split the Data
+
+Use functions from tidymodels to split the data into a training and test set (75/25 split). Use the strata argument to stratify the split on the seasons variable. • On the training set, create a 10 fold CV split.
+
+The code splits the dataset bd_sub into training and test sets using tidymodels in R. initial_split(bd_sub, prop = 3/4, strata = SEASONS): Splits bd_sub so that 75% goes to training and 25% to testing, while preserving the distribution of SEASONS.
+
+bike_split: This is a split object created by initial_split(). It contains information about how the data was divided into training and testing sets, but does not contain the actual data frames.
+
+bike_train: This is the training set, extracted from bike_split using training(bike_split). It contains 70% of the original data, selected randomly.
+
+bike_test: This is the testing set, extracted from bike_split using testing(bike_split). It contains the remaining 30% of the data.
+
+```{r}
+library(tidymodels)
+
+set.seed(222)
+# Put 3/4 of the data into the training set.  init_split is the Test Set. 
+bike_data_split <- initial_split(bd_sub, prop = 3/4, strata = SEASONS)
+               
+# Create data frames for the two sets:
+bike_train_data <- training(bike_data_split)
+bike_test_data  <- testing(bike_data_split)
+
+#On the training set, create a 10 fold CV split
+bike_CV_folds <- vfold_cv(bike_train_data, 10)
+
+```
+
+## Recipes for HW 9
+
+This recipe is for all model types except MLR.
+
+```{r}
+
+#Define Recipe 1
+recipe1 <- 
+  recipe(SUM_RBC ~ ., data = bike_train_data) |> 
+  step_date(DATE, features = c("dow")) |>              
+  step_mutate(
+    DAY_TYPE = factor(
+      ifelse(
+        DATE_dow == "Sat" | DATE_dow == "Sun", "WKEND", "WKDAY"))) |>
+  step_rm(DATE_dow, DATE) |>
+  step_normalize(all_numeric_predictors()) |>
+  step_dummy(all_nominal_predictors())
+
+
+recipe1_prep <- prep(recipe1, training = bike_train_data)
+recipe1_baked <- bake(recipe1_prep, new_data = bike_test_data)  
+ 
+write.csv(recipe1_baked, "recipe1_baked.csv")
+
+```
+
+MLR Recipe
+```{r}
+#Define Recipe 2
+
+recipe2 <- 
+  recipe(SUM_RBC ~ ., data = bike_train_data) |> 
+  step_date(DATE, features = c("dow")) |>              
+  step_mutate(
+    DAY_TYPE = factor(
+      ifelse(
+        DATE_dow == "Sat" | DATE_dow == "Sun", "WKEND", "WKDAY"))) |>
+  step_rm(DATE_dow, DATE) |>
+  step_normalize(all_numeric_predictors()) |>
+  step_dummy(all_nominal_predictors()) |>
+  step_interact(
+  terms = ~ starts_with("HOLIDAY"):starts_with("SEASONS") +
+           `TEMP(deg C)_MEAN`:starts_with("SEASONS") +
+           `TEMP(deg C)_MEAN`:`SUM_RAIN_FALL(mm)`
+)
+  
+recipe2_prep <- prep(recipe2, training = bike_train_data)
+recipe2_baked <- bake(recipe2_prep, new_data = bike_test_data)  
+ 
+write.csv(recipe2_baked, "recipe2_baked.csv")
+
+```
+
+## MLR Model from HW 8
+
+The best model was already selected from HW 8 as Recipe 2, so that step is not shown here.
+
+### Define MLR Model Object
+```{r}
+MLR_model <- linear_reg() |>
+set_engine("lm")
+
+```
+
+### Define MLR Workflow
+```{r}
+MLR_wkf <- workflow() |>
+  add_recipe(recipe2) |>
+  add_model(MLR_model)
+```
+
+### Fit the MLR to CV Folds
+```{r}
+MLR_CV_fit <- MLR_wkf |>
+  fit_resamples(bike_CV_folds)
+```
+
+### Fit the MLR to the Training Set
+```{r}
+MLR_fitT <- MLR_wkf |>
+fit(bike_train_data)
+```
+
+MLR_fit: This fits the chosen model (e.g., best multiple linear regression) to the entire training set.
+
+### Fit the MLR to the Test Set
+```{r}
+MLR_final <- MLR_wkf |>
+   last_fit(bike_data_split)
+```
+
+MLR_final: This uses last_fit() to train the model on the training set and evaluate its predictions on the test set, giving performance metrics for out-of-sample data.
+
+## LASSO Model
+
+### Define LASSO Model Object
+```{r}
+LASSO_model <- linear_reg(penalty = tune(), mixture = 1) |>
+  set_engine("glmnet")
+```
+
+### Create Workflow for LASSO Model
+```{r}
+LASSO_wkf <- workflow() |>
+  add_recipe(recipe1) |>
+  add_model(LASSO_model)
+```
+
+### Fit the LASSO Workflow to CV Folds with tune_grid() and grid_regular()
+
+We saw how to fit a workflow to a set of CV folds with fit_resample(). Since we have a tuning parameter here, we don’t want to use that function. Instead, we use tune_grid(). This function allows us to fit the model to CV folds but specify the set of tuning parameters to consider.
+
+This implies we are actually doing a bunch of model fits on the CV folds (one for each tuning parameter). In the tune_grid() function we can specify the values of the tuning parameter with the grid = argument. grid_regular() is a function that can be used to choose a grid of reasonable values.
+
+```{r}
+LASSO_grid <- LASSO_wkf |>
+  tune_grid(resamples = bike_CV_folds,
+            grid = grid_regular(penalty(), levels = 200)) 
+```
+
+### Select Best Model with select_best()
+```{r}
+LASSO_best <- LASSO_grid |>
+  select_best(metric = "rmse")
+```
+
+### Fit Best LASSO Model to the Training Set with finalize_workflow()
+```{r}
+LASSO_fitT <- LASSO_wkf |>
+  finalize_workflow(LASSO_best) |>
+  fit(bike_train_data)
+```
+finalize_workflow() tells R to finish our training with a specific setting of the terms we set to tune() in our model definition.
+
+### Fit the MLR to the Test Set
+```{r}
+LASSO_final <- LASSO_wkf |>
+  finalize_workflow(LASSO_best) |>
+  last_fit(bike_data_split)
+```
+
+## Regression Tree Model
+
+### Define Regression Tree (RTREE) Model and Engine
+```{r}
+RTREE_model <- decision_tree(tree_depth = tune(),
+                          min_n = 20,
+                          cost_complexity = tune()) |>
+  set_engine("rpart") |>
+  set_mode("regression")
+```
+
+### Create Workflow for RTREE Model
+```{r}
+RTREE_wkf <- workflow() |>
+  add_recipe(recipe1) |>
+  add_model(RTREE_model)
+```
+
+### Fit the RTREE Model to CV Folds
+```{r}
+RTREE_grid <- grid_regular(cost_complexity(),
+                          tree_depth(),
+                          levels = c(10, 5))
+RTREE_fits <- RTREE_wkf |> 
+  tune_grid(resamples = bike_CV_folds,
+            grid = RTREE_grid)
+```
+
+### Select the Best RTREE Model with select_best()
+```{r}
+RTREE_best <- select_best(RTREE_fits, metric = "rmse")
+```
+
+### Fit Best RTREE model on the Training Split with finalize_workflow()
+```{r}
+RTREE_fitT <- RTREE_wkf |>
+  finalize_workflow(RTREE_best)|>
+  fit(bike_train_data)
+```
+
+### Fit the RTREE model to the Test Set
+```{r}
+RTREE_final <- RTREE_wkf |>
+  finalize_workflow(RTREE_best) |>
+  last_fit(bike_data_split)
+```
+
+## Bagged Tree Model
+
+### Define Bagged Tree (BTREE) Model and Engine
+```{r}
+BTREE_model <- bag_tree(tree_depth = integer(5), min_n = integer(10), cost_complexity = tune()) |>
+set_engine("rpart") |>
+set_mode("regression") |>
+  translate()
+```
+
+### Create Workflow for BTREE Model
+```{r}
+BTREE_wkf <- workflow() |> 
+  add_recipe(recipe1) |>
+add_model(BTREE_model)
+```
+
+### Fit the BTREE Model to CV Folds
+```{r}
+
+BTREE_tuned <- BTREE_wkf |>
+tune_grid(resamples = bike_CV_folds,
+grid = grid_regular(cost_complexity(), 
+levels = 15),
+metrics = metric_set(rmse))
+```
+
+### Select the Best BTREE Model with select_best()
+```{r}
+BTREE_best <- select_best(BTREE_tuned, metric = "rmse")
+```
+
+### Fit Best BTREE model on the Training Set with finalize_workflow()
+```{r}
+BTREE_fitT <- BTREE_wkf |>
+  finalize_workflow(BTREE_best)|>
+  fit(bike_train_data)
+```
+
+### Fit the BTREE model to the Test Set
+```{r}
+BTREE_final <- BTREE_wkf |>
+  finalize_workflow(BTREE_best) |>
+  last_fit(bike_data_split)
+```
+
+## Random Forest Model
+
+### Define Random Forest (RF) Model and Engine
+```{r}
+RF_model <- rand_forest(mtry = tune()) |>
+set_engine("ranger") |>
+set_mode("regression")
+```
+
+### Create Workflow for RF Model
+```{r}
+RF_wkf <- workflow() |> 
+  add_recipe(recipe1) |>
+add_model(RF_model)
+```
+
+### Fit the RF Model to CV Folds
+```{r}
+RF_tuned <- RF_wkf |>
+tune_grid(resamples = bike_CV_folds,
+grid = 7, 
+metrics = metric_set(rmse))
+```
+
+### Select the Best RF Model with select_best()
+```{r}
+RF_best <- select_best(RF_tuned, metric = "rmse")
+```
+
+### Fit Best RF model on the Training Set with finalize_workflow().
+```{r}
+RF_fitT <- RF_wkf |>
+  finalize_workflow(RF_best)|>
+  fit(bike_train_data)
+```
+
+### Fit the RF model to the Test Set
+```{r}
+RF_final <- RF_wkf |>
+  finalize_workflow(RF_best) |>
+  last_fit(bike_data_split)
+```
+
+## Compare All Final Models on the Test set
+```{r}
+
+rbind(MLR_final |> compute_metrics(metric_set(rmse, mae)),
+      LASSO_final |> compute_metrics(metric_set(rmse, mae)),
+      RTREE_final |> compute_metrics(metric_set(rmse, mae)),
+#     BTREE_final |> compute_metrics(metric_set(rmse, mae)),
+      RF_final |> compute_metrics(metric_set(rmse, mae)))
+```
+Here we can see that the MLR Model and RF Model are the best models.  they have the lowest RMSE and MAE. The question is, which one of these is the "better" model. The MLR Model has a higher RMSE than the RF Model, but the MLR Model has a lower MAE compared to the RF Model. For me, I would select the RF Model because of the lower RMSE because RMSE is in the same units as the data, which makes it easier for me to interpret what is going on.
+
+
+## Extract the Final Model Fits and Report a Summary of Each Model
+– For the LASSO and MLR models, report the final coefficient tables
+– For the regression tree model, give a plot of the final fit
+– For the bagged tree and random forest models, produce a variable importance plot
+∗ For the random forest model, this is a bit complicated. Check this out and see if you can get
+it to work.
+```{r}
+final_model |> 
+  extract_fit_parsnip() |> 
+  tidy()
+```
+
