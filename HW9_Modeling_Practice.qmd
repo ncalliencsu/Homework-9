@@ -4,10 +4,7 @@ format: html
 editor: visual
 ---
 
-# Homework 9 Modeling Practice
-
 ## Read Data and Library Setup
-
 ```{r}
 
 library(baguette)
@@ -58,7 +55,6 @@ write.csv(bike_data, "bike_data.csv")
 ```
 
 Summarize Across Hours
-
 ```{r}
 
 bd_sub <- bike_data |> 
@@ -74,7 +70,6 @@ write.csv(bd_sub, "bd_sub_after.csv")
 ```
 
 ## Split the Data
-
 Use functions from tidymodels to split the data into a training and test set (75/25 split). Use the strata argument to stratify the split on the seasons variable. • On the training set, create a 10 fold CV split.
 
 The code splits the dataset bd_sub into training and test sets using tidymodels in R. initial_split(bd_sub, prop = 3/4, strata = SEASONS): Splits bd_sub so that 75% goes to training and 25% to testing, while preserving the distribution of SEASONS.
@@ -104,20 +99,19 @@ bike_CV_folds <- vfold_cv(bike_train_data, 10)
 ## Recipes for HW 9
 
 This recipe is for all model types except MLR.
-
 ```{r}
 
-#Define Recipe 1
-recipe1 <- 
-  recipe(SUM_RBC ~ ., data = bike_train_data) |> 
-  step_date(DATE, features = c("dow")) |>              
-  step_mutate(
-    DAY_TYPE = factor(
-      ifelse(
-        DATE_dow == "Sat" | DATE_dow == "Sun", "WKEND", "WKDAY"))) |>
-  step_rm(DATE_dow, DATE) |>
-  step_normalize(all_numeric_predictors()) |>
-  step_dummy(all_nominal_predictors())
+  #Define Recipe 1
+  recipe1 <- 
+    recipe(SUM_RBC ~ ., data = bike_train_data) |> 
+    step_date(DATE, features = c("dow")) |>              
+    step_mutate(
+      DAY_TYPE = factor(
+        ifelse(
+          DATE_dow == "Sat" | DATE_dow == "Sun", "WKEND", "WKDAY"))) |>
+    step_rm(DATE_dow, DATE) |>
+    step_normalize(all_numeric_predictors()) |>
+    step_dummy(all_nominal_predictors())
 
 
 recipe1_prep <- prep(recipe1, training = bike_train_data)
@@ -160,7 +154,6 @@ write.csv(recipe2_baked, "recipe2_baked.csv")
 The best model was already selected from HW 8 as Recipe 2, so that step is not shown here.
 
 ### Define MLR Model Object
-
 ```{r}
 MLR_model <- linear_reg() |>
 set_engine("lm")
@@ -168,7 +161,6 @@ set_engine("lm")
 ```
 
 ### Define MLR Workflow
-
 ```{r}
 MLR_wkf <- workflow() |>
   add_recipe(recipe2) |>
@@ -176,15 +168,13 @@ MLR_wkf <- workflow() |>
 ```
 
 ### Fit the MLR to CV Folds
-
 ```{r}
-set.seed(222)
 MLR_CV_fit <- MLR_wkf |>
   fit_resamples(bike_CV_folds)
 ```
+I got this Warning in HW 8 and was unable to resolve it.  Professor Post said the code looked fine.
 
 ### Fit the MLR to the Training Set
-
 ```{r}
 MLR_fitT <- MLR_wkf |>
 fit(bike_train_data)
@@ -193,7 +183,6 @@ fit(bike_train_data)
 MLR_fit: This fits the chosen model (e.g., best multiple linear regression) to the entire training set.
 
 ### Fit the MLR to the Test Set
-
 ```{r}
 MLR_final <- MLR_wkf |>
    last_fit(bike_data_split)
@@ -204,14 +193,12 @@ MLR_final: This uses last_fit() to train the model on the training set and evalu
 ## LASSO Model
 
 ### Define LASSO Model Object
-
 ```{r}
 LASSO_model <- linear_reg(penalty = tune(), mixture = 1) |>
   set_engine("glmnet")
 ```
 
 ### Create Workflow for LASSO Model
-
 ```{r}
 LASSO_wkf <- workflow() |>
   add_recipe(recipe1) |>
@@ -225,21 +212,18 @@ We saw how to fit a workflow to a set of CV folds with fit_resample(). Since we 
 This implies we are actually doing a bunch of model fits on the CV folds (one for each tuning parameter). In the tune_grid() function we can specify the values of the tuning parameter with the grid = argument. grid_regular() is a function that can be used to choose a grid of reasonable values.
 
 ```{r}
-set.seed(222)
 LASSO_grid <- LASSO_wkf |>
   tune_grid(resamples = bike_CV_folds,
             grid = grid_regular(penalty(), levels = 200)) 
 ```
 
 ### Select Best Model with select_best()
-
 ```{r}
 LASSO_best <- LASSO_grid |>
   select_best(metric = "rmse")
 ```
 
 ### Fit Best LASSO Model to the Training Set with finalize_workflow()
-
 ```{r}
 LASSO_fitT <- LASSO_wkf |>
   finalize_workflow(LASSO_best) |>
@@ -249,7 +233,6 @@ LASSO_fitT <- LASSO_wkf |>
 finalize_workflow() tells R to finish our training with a specific setting of the terms we set to tune() in our model definition.
 
 ### Fit the MLR to the Test Set
-
 ```{r}
 LASSO_final <- LASSO_wkf |>
   finalize_workflow(LASSO_best) |>
@@ -259,7 +242,6 @@ LASSO_final <- LASSO_wkf |>
 ## Regression Tree Model
 
 ### Define Regression Tree (RTREE) Model and Engine
-
 ```{r}
 RTREE_model <- decision_tree(tree_depth = tune(),
                           min_n = 20,
@@ -269,7 +251,6 @@ RTREE_model <- decision_tree(tree_depth = tune(),
 ```
 
 ### Create Workflow for RTREE Model
-
 ```{r}
 RTREE_wkf <- workflow() |>
   add_recipe(recipe1) |>
@@ -277,9 +258,7 @@ RTREE_wkf <- workflow() |>
 ```
 
 ### Fit the RTREE Model to CV Folds
-
 ```{r}
-set.seed(222)
 RTREE_grid <- grid_regular(cost_complexity(),
                           tree_depth(),
                           levels = c(10, 5))
@@ -289,13 +268,11 @@ RTREE_fits <- RTREE_wkf |>
 ```
 
 ### Select the Best RTREE Model with select_best()
-
 ```{r}
 RTREE_best <- select_best(RTREE_fits, metric = "rmse")
 ```
 
-### Fit Best RTREE model on the Training Split with finalize_workflow()
-
+### Fit Best RTREE model on the Training Set with finalize_workflow()
 ```{r}
 RTREE_fitT <- RTREE_wkf |>
   finalize_workflow(RTREE_best)|>
@@ -303,7 +280,6 @@ RTREE_fitT <- RTREE_wkf |>
 ```
 
 ### Fit the RTREE model to the Test Set
-
 ```{r}
 RTREE_final <- RTREE_wkf |>
   finalize_workflow(RTREE_best) |>
@@ -313,8 +289,7 @@ RTREE_final <- RTREE_wkf |>
 ## Bagged Tree Model
 
 ### Define Bagged Tree (BTREE) Model and Engine
-
-```{r}
+```{r eval=FALSE}
 BTREE_model <- bag_tree(tree_depth = integer(5), min_n = integer(10), cost_complexity = tune()) |>
 set_engine("rpart") |>
 set_mode("regression") |>
@@ -322,42 +297,36 @@ set_mode("regression") |>
 ```
 
 ### Create Workflow for BTREE Model
-
-```{r}
-BTREE_wkf <- workflow() |> 
+```{r eval=FALSE}
+BTREE_wkf <- workflow() |>
   add_recipe(recipe1) |>
 add_model(BTREE_model)
 ```
 
 ### Fit the BTREE Model to CV Folds
-
-```{r}
-set.seed(222)
-
+```{r eval=FALSE}
 BTREE_tuned <- BTREE_wkf |>
 tune_grid(resamples = bike_CV_folds,
-grid = grid_regular(cost_complexity(), 
+grid = grid_regular(cost_complexity(),
 levels = 15),
 metrics = metric_set(rmse))
 ```
+NOTE TO RYAN - I was unable to get the Bagged Tree Model to run.  I tried it on my notebook computer and also got errors. Professor Post said I can submit this as is and get full credit for this part of the homework.
 
 ### Select the Best BTREE Model with select_best()
-
-```{r}
+```{r eval=FALSE}
 BTREE_best <- select_best(BTREE_tuned, metric = "rmse")
 ```
 
 ### Fit Best BTREE model on the Training Set with finalize_workflow()
-
-```{r}
+```{r eval=FALSE}
 BTREE_fitT <- BTREE_wkf |>
   finalize_workflow(BTREE_best)|>
   fit(bike_train_data)
 ```
 
 ### Fit the BTREE model to the Test Set
-
-```{r}
+```{r eval=FALSE}
 BTREE_final <- BTREE_wkf |>
   finalize_workflow(BTREE_best) |>
   last_fit(bike_data_split)
@@ -365,17 +334,13 @@ BTREE_final <- BTREE_wkf |>
 
 ## Random Forest Model
 
-
 ### Define Random Forest (RF) Model and Engine
-
 ```{r}
 RF_model <- rand_forest(mode = "regression", mtry = tune()) |>
 set_engine("ranger", importance = "impurity") 
-#set_mode("regression")
 ```
 
 ### Create Workflow for RF Model
-
 ```{r}
 RF_wkf <- workflow() |> 
   add_recipe(recipe1) |>
@@ -383,9 +348,7 @@ add_model(RF_model)
 ```
 
 ### Fit the RF Model to CV Folds
-
 ```{r}
-set.seed(222)
 RF_tuned <- RF_wkf |>
 tune_grid(resamples = bike_CV_folds,
 grid = 7, 
@@ -393,13 +356,11 @@ metrics = metric_set(rmse))
 ```
 
 ### Select the Best RF Model with select_best()
-
 ```{r}
 RF_best <- select_best(RF_tuned, metric = "rmse")
 ```
 
-### Fit Best RF model on the Training Set with finalize_workflow().
-
+### Fit Best RF model on the Training Set with finalize_workflow()
 ```{r}
 RF_fitT <- RF_wkf |>
   finalize_workflow(RF_best)|>
@@ -407,7 +368,6 @@ RF_fitT <- RF_wkf |>
 ```
 
 ### Fit the RF model to the Test Set
-
 ```{r}
 RF_final <- RF_wkf |>
   finalize_workflow(RF_best) |>
@@ -415,7 +375,6 @@ RF_final <- RF_wkf |>
 ```
 
 ## Compare All Final Models on the Test set
-
 ```{r}
 
 rbind(MLR_final |> compute_metrics(metric_set(rmse, mae)),
@@ -428,8 +387,7 @@ rbind(MLR_final |> compute_metrics(metric_set(rmse, mae)),
 Here we can see that the RF Model is the best model with the lowest RMSE and MAE.
 
 ## Extract the Final Model Fits and Report a Summary of Each Model
-
-– For the LASSO and MLR models, report the final coefficient tables – For the regression tree model, give a plot of the final fit – For the bagged tree and random forest models, produce a variable importance plot ∗ For the random forest model, this is a bit complicated. Check this out and see if you can get it to work.  
+– For the LASSO and MLR models, report the final coefficient tables – For the regression tree model, give a plot of the final fit – For the bagged tree and random forest models, produce a variable importance plot ∗ For the random forest model, this is a bit complicated. Check this out and see if you can get it to work.
 
 MLR Final Model Fit and Summary
 ```{r}
@@ -441,30 +399,27 @@ MLR_final |>
 LASSO Final Model Fit and Summary
 ```{r}
 LASSO_final |> 
-  extract_fit_engine() |> 
-  tidy() |> 
-  rename(penalty = lambda) |>   # <- for consistent naming
-  filter(term != "(Intercept)")
+  extract_fit_parsnip() |> 
+  tidy()
 ```
 
 RTREE Final Model Fit and Summary
 ```{r}
 RTREE_final |>
   extract_fit_engine() |>
-  rpart.plot::rpart.plot(roundint = FALSE)
+  rpart.plot::rpart.plot(cex = 0.5 , roundint = FALSE)
 ```
 
 BTREE Final Model Fit and Summary
-```{r}
+```{r eval=FALSE}
 BTREE_final |>
-  extract_fit_engine() 
+  extract_fit_engine()
 
 BTREE_final$imp |>
   mutate(term = factor(term, levels = term)) |>
-  ggplot(aes(x = term, y = value)) + 
+  ggplot(aes(x = term, y = value)) +
   geom_bar(stat ="identity") +
   coord_flip()
-
 ```
 
 RF Final Model Fit and Summary
@@ -473,9 +428,9 @@ RF_final |>
   extract_fit_parsnip() |>
   vip(num_features = 10)
 ```
+
 ## Fit the Final RF Model to the Entire Data Set
 ```{r}
-
 Final_Model <- RF_wkf |>
   finalize_workflow(RF_best) |>
   fit(bd_sub) |>
@@ -483,9 +438,4 @@ Final_Model <- RF_wkf |>
   vip(num_features = 10)
 
 Final_Model
-  
-
-
-
 ```
-
