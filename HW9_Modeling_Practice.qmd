@@ -64,6 +64,8 @@ bd_sub <- bike_data |>
             "SUM_RAIN_FALL(mm)" = sum(`RAIN_FALL(mm)`),
             "SUM_SNOW_FALL(cm)" = sum(`SNOW_FALL(cm)`),) |>
             select(DATE, SEASONS, HOLIDAY, starts_with("SUM"), everything(), -RBC_MEAN, -HOUR_MEAN, -`RAIN_FALL(mm)_MEAN`, -`SNOW_FALL(cm)_MEAN`)
+
+colnames(bd_sub) <- c("DATE", "SEASONS", "HOLIDAY", "SUM_RBC", "SUM_RAIN_FALL", "SUM_SNOW_FALL", "TEMP", "RH", "WD_SPD", "VIS", "DP_TEMP", "SOL_RAD")
                         
 write.csv(bd_sub, "bd_sub_after.csv")
 
@@ -114,10 +116,10 @@ This recipe is for all model types except MLR.
     step_dummy(all_nominal_predictors())
 
 
-recipe1_prep <- prep(recipe1, training = bike_train_data)
-recipe1_baked <- bake(recipe1_prep, new_data = bike_test_data)  
- 
-write.csv(recipe1_baked, "recipe1_baked.csv")
+# recipe1_prep <- prep(recipe1, training = bike_train_data)
+# recipe1_baked <- bake(recipe1_prep, new_data = bike_test_data)  
+#  
+# write.csv(recipe1_baked, "recipe1_baked.csv")
 
 ```
 
@@ -138,14 +140,14 @@ recipe2 <-
   step_dummy(all_nominal_predictors()) |>
   step_interact(
   terms = ~ starts_with("HOLIDAY"):starts_with("SEASONS") +
-           `TEMP(deg C)_MEAN`:starts_with("SEASONS") +
-           `TEMP(deg C)_MEAN`:`SUM_RAIN_FALL(mm)`
+           `TEMP`:starts_with("SEASONS") +
+           `TEMP`:`SUM_RAIN_FALL`
 )
   
-recipe2_prep <- prep(recipe2, training = bike_train_data)
-recipe2_baked <- bake(recipe2_prep, new_data = bike_test_data)  
- 
-write.csv(recipe2_baked, "recipe2_baked.csv")
+# recipe2_prep <- prep(recipe2, training = bike_train_data)
+# recipe2_baked <- bake(recipe2_prep, new_data = bike_test_data)  
+#  
+# write.csv(recipe2_baked, "recipe2_baked.csv")
 
 ```
 
