@@ -291,44 +291,44 @@ RTREE_final <- RTREE_wkf |>
 ## Bagged Tree Model
 
 ### Define Bagged Tree (BTREE) Model and Engine
-```{r eval=FALSE}
-BTREE_model <- bag_tree(tree_depth = integer(5), min_n = integer(10), cost_complexity = tune()) |>
+```{r eval=TRUE}
+BTREE_model <- bag_tree(tree_depth = 5, min_n = 10, cost_complexity = tune()) |>
 set_engine("rpart") |>
 set_mode("regression") |>
   translate()
 ```
 
 ### Create Workflow for BTREE Model
-```{r eval=FALSE}
+```{r eval=TRUE}
 BTREE_wkf <- workflow() |>
   add_recipe(recipe1) |>
 add_model(BTREE_model)
 ```
 
 ### Fit the BTREE Model to CV Folds
-```{r eval=FALSE}
+```{r eval=TRUE}
 BTREE_tuned <- BTREE_wkf |>
 tune_grid(resamples = bike_CV_folds,
 grid = grid_regular(cost_complexity(),
 levels = 15),
 metrics = metric_set(rmse))
 ```
-NOTE TO RYAN - I was unable to get the Bagged Tree Model to run.  I tried it on my notebook computer and also got errors. Professor Post said I can submit this as is and get full credit for this part of the homework.
+
 
 ### Select the Best BTREE Model with select_best()
-```{r eval=FALSE}
+```{r eval=TRUE}
 BTREE_best <- select_best(BTREE_tuned, metric = "rmse")
 ```
 
 ### Fit Best BTREE model on the Training Set with finalize_workflow()
-```{r eval=FALSE}
+```{r eval=TRUE}
 BTREE_fitT <- BTREE_wkf |>
   finalize_workflow(BTREE_best)|>
   fit(bike_train_data)
 ```
 
 ### Fit the BTREE model to the Test Set
-```{r eval=FALSE}
+```{r eval=TRUE}
 BTREE_final <- BTREE_wkf |>
   finalize_workflow(BTREE_best) |>
   last_fit(bike_data_split)
@@ -382,7 +382,7 @@ RF_final <- RF_wkf |>
 rbind(MLR_final |> compute_metrics(metric_set(rmse, mae)),
       LASSO_final |> compute_metrics(metric_set(rmse, mae)),
       RTREE_final |> compute_metrics(metric_set(rmse, mae)),
-#     BTREE_final |> compute_metrics(metric_set(rmse, mae)),
+      BTREE_final |> compute_metrics(metric_set(rmse, mae)),
       RF_final |> compute_metrics(metric_set(rmse, mae)))
 ```
 
@@ -413,11 +413,12 @@ RTREE_final |>
 ```
 
 BTREE Final Model Fit and Summary
-```{r eval=FALSE}
-BTREE_final |>
+```{r eval=TRUE}
+BTREE_final <- BTREE_final |>
   extract_fit_engine()
 
 BTREE_final$imp |>
+  arrange(value) |>
   mutate(term = factor(term, levels = term)) |>
   ggplot(aes(x = term, y = value)) +
   geom_bar(stat ="identity") +
